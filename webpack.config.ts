@@ -1,15 +1,15 @@
-const path = require('path');
-const webpack = require('webpack');
-const Html = require('html-webpack-plugin');
-const Template = require('html-webpack-template');
-const ExtractTextPlugin = require('extract-text-webpack-plugin');
-const CleanWebpackPlugin = require('clean-webpack-plugin');
+import * as path from 'path';
+import * as webpack from 'webpack';
+import * as Html from 'html-webpack-plugin';
+import * as Template from 'html-webpack-template';
+import * as ExtractTextPlugin from 'extract-text-webpack-plugin';
+import * as CleanWebpackPlugin from 'clean-webpack-plugin';
 
 
 const prod = process.env.NODE_ENV === "production";
 console.log("building in " + (prod ? "production mode" : "dev mode"));
 
-module.exports = {
+const config: webpack.Configuration = {
     entry: './src/main',
     output: {
         path: path.resolve(__dirname, 'build'),
@@ -17,7 +17,7 @@ module.exports = {
         filename: "[name].[hash].js",
     },
     // add a source map so we can see the original code locations for debugging
-    devtool: "sourcemap",
+    devtool: "source-map",
     module: {
         rules: [
             {
@@ -98,3 +98,4 @@ module.exports = {
         extensions: ['.ts', '.tsx', '.js', '.jsx']
     },
 }
+export default config;
