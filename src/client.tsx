@@ -3,13 +3,14 @@ import { render } from "react-dom";
 import * as mobx from "mobx";
 import * as mobxReact from "mobx-react";
 import './style.scss';
-import * as server from './server';
+import * as serverType from './server';
 import { observable } from "mobx";
 import { observer } from "mobx-react";
 import { CommandOutput, StreamingOutput } from "./server";
-import { PromptInput, App } from "./style";
-
-
+import { PromptInput, App, PromptDiv, PrefixSpan, PreWrapDiv } from "./style";
+import { makeClient } from './remotify';
+import * as util from './util';
+util.polyfillAsyncIterator();
 type CanDisplay = {
     quality: number // 
 };
@@ -47,12 +48,29 @@ class GenericStringDisplayer extends React.Component<{ data: CommandOutput }, {}
         const { data } = this.props;
         if (typeof data.data !== 'string') throw Error("invalid");
         return (
-            <div>
+            <PreWrapDiv>
                 {data.data}
+            </PreWrapDiv>
+        )
+    }
+}
+
+@observer
+class FilenameDisplayer extends React.Component<{ data: CommandOutput }, {}> {
+    static canDisplay(output: CommandOutput): CanDisplay {
+        if (output.type === "SingleOutput" && output.meta === "filename") return { quality: 2 };
+        else return { quality: 0 };
+    }
+    render() {
+        const { data } = this.props;
+        return (
+            <div>
+                [[Filename: {data.data}]]
             </div>
         )
     }
 }
+
 
 @observer
 class AutoChooseDisplayer extends React.Component<{ data: CommandOutput }, {}> {
@@ -71,7 +89,8 @@ class AutoChooseDisplayer extends React.Component<{ data: CommandOutput }, {}> {
 
 const displayers: OutputDisplayer[] = [
     GenericStreamingDisplayer,
-    GenericStringDisplayer
+    GenericStringDisplayer,
+    FilenameDisplayer
 ];
 
 @observer
@@ -89,7 +108,7 @@ class SingleCommandGUI extends React.Component<{ input: string, output: CommandO
 }
 
 function PromptPrefix() {
-    return <span>$ </span>
+    return <PrefixSpan>$</PrefixSpan>;
 }
 @observer
 class Prompt extends React.Component<{ run: (input: string) => void }, {}> {
@@ -103,8 +122,9 @@ class Prompt extends React.Component<{ run: (input: string) => void }, {}> {
     render() {
         return (
             <div>
-                <div><PromptPrefix /><PromptInput value={this.input} onChange={e => this.input = e.currentTarget.value} onKeyUp={this.onKeyUp} innerRef={this.setFocus} />
-                </div>
+                <PromptDiv>
+                    <PromptPrefix /><PromptInput value={this.input} onChange={e => this.input = e.currentTarget.value} onKeyUp={this.onKeyUp} innerRef={this.setFocus} />
+                </PromptDiv>
             </div>
         );
     }
@@ -114,7 +134,12 @@ class Prompt extends React.Component<{ run: (input: string) => void }, {}> {
 class GUI extends React.Component<{}, {}> {
     @observable history = [] as { input: string, output: StreamingOutput }[];
 
+    server = (async () => {
+        const server = await makeClient<typeof serverType>();
+        return server;
+    })();
     run = async (command: string) => {
+        const server = await this.server;
         let ele = mobx.observable({
             input: command,
             output: {
@@ -124,7 +149,7 @@ class GUI extends React.Component<{}, {}> {
             } as StreamingOutput
         });
         this.history.push(ele);
-        for await (const res of server.executeCommand({ type: "string", cmd: ele.input })) {
+        for await (const res of await server.executeCommand({ type: "string", cmd: ele.input })) {
             ele.output.data.push(res);
         }
         ele.output.done = true;
