@@ -1,7 +1,7 @@
 {
   "scripts": {
     "dev": "webpack-dev-server",
-    "build": "node build.js"
+    "build": "node gh-pages-deploy.js"
   },
   "dependencies": {
     "@types/core-js": "^0.9.39",

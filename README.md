@@ -4,6 +4,6 @@
 
 * run `yarn run dev` for developing.
 
-* run `yarn run build` for the production build and commit to the gh-pages branch.
+* run `yarn run gh-pages-deploy` for the production build and commit to the gh-pages branch.
 
 * run `git push --all` to push the gh-pages branch.
