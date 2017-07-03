@@ -10,7 +10,7 @@ const prod = process.env.NODE_ENV === "production";
 console.log("building in " + (prod ? "production mode" : "dev mode"));
 
 const config: webpack.Configuration = {
-    entry: './src/main',
+    entry: './src/client',
     output: {
         path: path.resolve(__dirname, 'build'),
         // add a hash to the file name to ensure the browser cache does not cache wrong versions
@@ -37,7 +37,16 @@ const config: webpack.Configuration = {
             },
             {
                 // typescript
-                test: /\.tsx?$/, use: 'awesome-typescript-loader',
+                test: /\.tsx?$/, use: [
+                    {
+                        loader: 'babel-loader',
+                        query: {
+                            //presets: ['es2015', 'react'],
+                            plugins: ['transform-async-generator-functions']
+                        }
+                    },
+                    'awesome-typescript-loader'
+                ],
                 exclude: /node_modules/
             },
             {

@@ -1,12 +1,12 @@
 {
   "compilerOptions": {
-    "target": "es5",
+    "target": "es2016",
     "module": "commonjs",
+    "allowJs": true,
     "lib": [
-      "es2017",
+      "esnext",
       "dom"
     ],
-    "allowJs": true,
     "jsx": "react",
     "strict": true,
     "experimentalDecorators": true
