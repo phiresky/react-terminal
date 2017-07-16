@@ -7,7 +7,6 @@ export async function* streamToIterable(readable: Readable) {
             new Promise<IteratorResult<string | Buffer>>(resolve => readable.once("data", chunk => resolve({ value: chunk, done: false }))),
             endPromise
         ]);
-        console.log("got", data);
         if (data.done) return;
         if (data.value instanceof Buffer) yield data.value.toString("utf8");
         else yield data.value;
