@@ -38,7 +38,6 @@ export async function makeServer(server: any) {
         }
         function replacer(key: string, value: any) {
             if (value && value[Symbol.asyncIterator]) {
-                console.log("got async iterator at", key);
                 const iteratorId = remotifyAsyncIterator(value, send);
                 return {
                     $$type: "AsyncIterator" as "AsyncIterator",
@@ -55,11 +54,7 @@ export async function makeServer(server: any) {
                     const { method, args, id } = message;
                     console.log("calling", method, args);
                     if (server[method]) {
-                        let result = server[method](...args);
-                        if (typeof result.then === 'function') {
-                            console.log("got promise");
-                            result = await result;
-                        }
+                        let result = await server[method](...args);
                         send({
                             type: "callback",
                             id,
@@ -152,7 +147,7 @@ export async function makeClient<T>(): Promise<T> {
                 break;
             }
             default: {
-                throw `unknown message ${message.type}`;
+                throw `unknown message ${(message as any).type}`;
             }
         }
     });

@@ -59,11 +59,13 @@ class GenericStringDisplayer extends Displayer("string", 1) {
 
 @observer
 class FileStatDisplayer extends Displayer("FileStat", 1) {
+    @observable readable = true;
     render() {
         const { data } = this.props;
+        const size = this.readable ? util.humanFileSize(data.stat.size, true) : data.stat.size + " B";
         return (
             <div>
-                {data.filename} ({data.stat.size} Byte)
+                {data.filename} (<span style={{ cursor: "pointer" }} onClick={() => this.readable = !this.readable}><i>{size}</i></span>)
             </div>
         )
     }
