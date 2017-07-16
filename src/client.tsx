@@ -6,66 +6,64 @@ import './style.scss';
 import * as serverType from './server';
 import { observable } from "mobx";
 import { observer } from "mobx-react";
-import { CommandOutput, StreamingOutput } from "./server";
+import { CommandOutput } from "./server";
 import { PromptInput, App, PromptDiv, PrefixSpan, PreWrapDiv } from "./style";
 import { makeClient } from './remotify';
 import * as util from './util';
+import * as types from './types';
+import * as t from 'io-ts';
+
+type validTypes = keyof typeof types;
+
 util.polyfillAsyncIterator();
 type CanDisplay = {
     quality: number // 
 };
 
-interface OutputDisplayer extends React.ComponentClass<{ data: CommandOutput }> {
-    canDisplay(output: CommandOutput): CanDisplay;
+interface OutputDisplayer extends React.ComponentClass<{ type: string, data: any }> {
+    canDisplay(output: validTypes): CanDisplay;
 }
 
-
+function Displayer<K extends validTypes>(s: K, quality: number) {
+    return class Displayer extends React.Component<{ type: K, data: t.TypeOf<typeof types[K]> }, {}> {
+        static canDisplay(type: validTypes): CanDisplay {
+            if (s === "any") return { quality };
+            return (type === s) ? { quality } : { quality: 0 };
+        }
+    }
+}
 
 @observer
-class GenericStreamingDisplayer extends React.Component<{ data: CommandOutput }, {}> {
-    static canDisplay(output: CommandOutput): CanDisplay {
-        if (output.type === "StreamingOutput") return { quality: 1 };
-        else return { quality: 0 };
-    }
+class GenericStreamingDisplayer extends React.Component<{ data: ObservableOutput }, {}> {
     render() {
         const { data } = this.props;
-        if (data.type !== 'StreamingOutput') throw Error("invalid");
         return (
             <div>
-                {data.data.map((d, i) => <AutoChooseDisplayer key={i} data={d} />)}
+                {data.data.map((d, i) => <AutoChooseDisplayer key={i} type={data.$innerType} data={d} />)}
                 {!data.done && <i>Running...</i>}
             </div>
         )
     }
 }
-@observer
-class GenericStringDisplayer extends React.Component<{ data: CommandOutput }, {}> {
-    static canDisplay(output: CommandOutput): CanDisplay {
-        if (output.type === "SingleOutput" && typeof output.data === "string") return { quality: 1 };
-        else return { quality: 0 };
-    }
+//@observer
+class GenericStringDisplayer extends Displayer("string", 1) {
     render() {
         const { data } = this.props;
-        if (typeof data.data !== 'string') throw Error("invalid");
         return (
             <PreWrapDiv>
-                {data.data}
+                {data}
             </PreWrapDiv>
         )
     }
 }
 
 @observer
-class FilenameDisplayer extends React.Component<{ data: CommandOutput }, {}> {
-    static canDisplay(output: CommandOutput): CanDisplay {
-        if (output.type === "SingleOutput" && output.meta === "filename") return { quality: 2 };
-        else return { quality: 0 };
-    }
+class FileStatDisplayer extends Displayer("FileStat", 1) {
     render() {
         const { data } = this.props;
         return (
             <div>
-                [[Filename: {data.data}]]
+                {data.filename} ({data.stat.size} Byte)
             </div>
         )
     }
@@ -73,34 +71,63 @@ class FilenameDisplayer extends React.Component<{ data: CommandOutput }, {}> {
 
 
 @observer
-class AutoChooseDisplayer extends React.Component<{ data: CommandOutput }, {}> {
+class AutoChooseDisplayer extends Displayer("any" as any, 1) {
     render() {
-        const { data } = this.props;
-        const rated = displayers.map(displayer => ({ displayer, quality: displayer.canDisplay(data).quality }));
+        const { data, type } = this.props;
+        const rated = displayers.map(displayer => ({ displayer, quality: displayer.canDisplay(type).quality }));
         const best = rated.sort((a, b) => b.quality - a.quality)[0];
         if (!best) return <div>No displayers found</div>;
+        console.log(rated);
         if (best.quality === 0) return <div>No matching displayer found</div>;
         const Displayer = best.displayer;
         return (
-            <Displayer data={data} />
+            <Displayer type={type} data={data} />
         );
     }
 }
 
+@observer
+class GenericJSONDisplayer extends Displayer("any", 0.5) {
+    render() {
+        const { data, type } = this.props;
+        return (
+            <div>
+                Generic display of `{type}`
+                <pre>
+                    {JSON.stringify(data, null, 3)}
+                </pre>
+            </div>
+        )
+    }
+}
+
+@observer
+class NativeCommandDisplayer extends Displayer("ProcessOutput", 1) {
+    render() {
+        const { data } = this.props;
+        return (
+            <pre style={{ display: "inline", color: data.stream === "stderr" ? "red" : "white" }}>
+                {data.text}
+            </pre>
+        )
+    }
+}
+
 const displayers: OutputDisplayer[] = [
-    GenericStreamingDisplayer,
     GenericStringDisplayer,
-    FilenameDisplayer
+    FileStatDisplayer,
+    GenericJSONDisplayer,
+    NativeCommandDisplayer
 ];
 
 @observer
-class SingleCommandGUI extends React.Component<{ input: string, output: CommandOutput }, {}> {
+class SingleCommandGUI extends React.Component<{ input: string, output: ObservableOutput }, {}> {
     render() {
         const { input, output } = this.props;
         return (
             <div>
                 <div><PromptPrefix /><span>{input}</span>
-                    {<AutoChooseDisplayer data={output} />}
+                    {<GenericStreamingDisplayer data={output} />}
                 </div>
             </div>
         );
@@ -130,9 +157,34 @@ class Prompt extends React.Component<{ run: (input: string) => void }, {}> {
     }
 }
 
+type ObservableOutput = {
+    $innerType: string,
+    data: any[],
+    done: boolean
+};
+function makeObservable(c: CommandOutput): ObservableOutput {
+    const ele = mobx.observable({
+        $innerType: c.$innerType,
+        data: [] as any[],
+        done: false
+    });
+    (async function () {
+        try {
+            for await (const res of c.data) {
+                ele.data.push(res);
+            }
+        } catch (e) {
+            ele.$innerType = "error";
+            ele.data.push(e);
+        }
+        ele.done = true;
+    })();
+    return ele;
+}
+
 @observer
 class GUI extends React.Component<{}, {}> {
-    @observable history = [] as { input: string, output: StreamingOutput }[];
+    @observable history = [] as { input: string, output: ObservableOutput }[];
 
     server = (async () => {
         const server = await makeClient<typeof serverType>();
@@ -140,19 +192,10 @@ class GUI extends React.Component<{}, {}> {
     })();
     run = async (command: string) => {
         const server = await this.server;
-        let ele = mobx.observable({
+        this.history.push({
             input: command,
-            output: {
-                type: "StreamingOutput",
-                data: [] as CommandOutput[],
-                done: false as boolean
-            } as StreamingOutput
+            output: makeObservable(await server.executeCommand({ type: "string", cmd: command }))
         });
-        this.history.push(ele);
-        for await (const res of await server.executeCommand({ type: "string", cmd: ele.input })) {
-            ele.output.data.push(res);
-        }
-        ele.output.done = true;
     }
     render() {
         const last = this.history.length > 0 ? this.history[this.history.length - 1] : null;
